@@ -20,15 +20,12 @@ namespace GaiasBot
     {
         internal static DiscordSocketClient _client;
 
-        internal static readonly string ID; 
-        internal static readonly string Token;
-
+        internal static readonly string ID = ConfigurationManager.AppSettings.Get("botID");
+        internal static readonly string Token = ConfigurationManager.AppSettings.Get("token");
         private static readonly string[] rolesHierarchy = ConfigurationManager.AppSettings.Get("rolesHierarchy").Split(',');
 
         static Bot()
         {
-            ID = ConfigurationManager.AppSettings.Get("botID");
-            Token = ConfigurationManager.AppSettings.Get("token");
             UserStats.LevelChanged += OnLevelChanged;
         }
 
@@ -63,152 +60,209 @@ namespace GaiasBot
         internal static async Task OnMessageReceived(SocketMessage message)
         {
             #region testing part
-
-            #endregion
-
-            if (message.Content.Split()[0] == "!item")
-            {
-                if (message.Content.TrimEnd(' ').ToLower() == "!item")
-                {
-                    await message.Channel.SendMessageAsync("Try to specify an item's name.");
-                }
-                else
-                {
-                    var builder = await GenerateItemCard(message);
-                    await message.Channel.SendMessageAsync("", false, builder);
-                }
-            }
-            if (message.Content.Split()[0] == "!items")
-            {
-                var builder = await GenerateDroplist(message);
-                await message.Channel.SendMessageAsync("", false, builder);
-            }
-            if (message.Content.Split()[0] == "!source")
-            {
-                if (message.Content.TrimEnd(' ').ToLower() == "!source")
-                {
-                    await message.Channel.SendMessageAsync("Try to specify a source name.");
-                }
-                else
-                {
-                    var builder = await GenerateMobCard(message);
-                    var botMessage = await message.Channel.SendMessageAsync("", false, builder);
-
-                    //await botMessage.AddReactionAsync(new Emoji("\u2B07"));
-
-                }
-            }
-            if (message.Content.Split()[0].ToLower() == "!purge" && CheckPermission(message) && message.Content.ToLower().TrimEnd(' ') != "!purge")
-            {
-                string[] purge = message.Content.Split(' ');
-                if (purge[1].Length > 3)
-                {
-                    var messagesTemp = message.Channel.GetMessagesAsync(Convert.ToUInt64(purge[1]), Direction.After);
-                    await messagesTemp.ForEachAsync(async m =>
-                    {
-                        foreach (IMessage mes in m)
-                        {
-                            await mes.DeleteAsync();
-                        }
-                    });
-                }
-                else
-                {
-                    var messagesTemp = message.Channel.GetMessagesAsync(Convert.ToInt32(purge[1]));
-                    await messagesTemp.ForEachAsync(async m =>
-                    {
-                        foreach (IMessage mes in m)
-                        {
-                            await mes.DeleteAsync();
-                        }
-                    });
-                }
-            }
-
-            #region experimental
-            if (message.Content.StartsWith("!host"))
-            {
-                await message.Channel.SendMessageAsync("rip ENT :(");
-                /*if (message.Content.Split().Length >= 2)
-                {
-                    _lastHostRequestMessage = message;
-                    string region = "atlanta";
-                    string usrName = message.Content.Split(' ')[1];
-                    if (message.Content.Split(' ').Length == 3 && Regex.IsMatch(message.Content.Split()[2].ToLower(), "[atlanta|ny|la|europe|au|jp|sg]")) region = message.Content.Split()[2].ToLower();
-                    var response = await entClient.HostGame(usrName, region);
-                    await message.Channel.SendMessageAsync(response.ToMdFormat());
-                }
-                else
-                {
-                    await message.Channel.SendMessageAsync("Command syntax: !host <username> [atlanta|ny|la|europe|au|jp|sg]");
-                }*/
-            }
-            #endregion
-
-            #region User exp handler section. Lots of shit are gonna happen here.
-            if (message.Content.ToLower() == "!getuserslist") { await RegisterUsersAsync(message); }
-            if (message.Content.ToLower().StartsWith("!top"))
-            {
-                int temp = 0;
-                if (Int32.TryParse(message.Content.Substring("!top".Length), out temp))
-                {
-                    await message.Channel.SendMessageAsync(await GenerateListOfTops(message));
-                }
-            }
-
-            if (!message.Content.StartsWith("!") && message.Content.Length > 10 && !message.Author.IsBot) { await UserStats.UpdateExperienceAsync(message); }
-            #endregion
-
-            //Needs to be reworked. 
-            //For instance, make methods to require SocketMessage object and do magic things with the object inside.
-            #region Commands handler section.
-
             if (message.Content.StartsWith("!"))
             {
-                if (message.Content.Substring(1).StartsWith("myexp")) await message.Channel.SendMessageAsync($"Your experience is {await UserStats.GetUserExperienceAsync(message.Author as SocketGuildUser)}");
-                if (message.Content.Substring(1).StartsWith("mylvl")) await message.Channel.SendMessageAsync($"Your level is {await UserStats.CountLevelAsync(message.Author as SocketGuildUser)}");
-                if (message.Content.Substring(1).ToLower().StartsWith("topic"))
+                string request = message.Content.TrimEnd(' ').Substring(1).Split()[0].ToLower();
+                switch (request)
                 {
-                    if (!String.IsNullOrEmpty((message.Channel as ITextChannel).Topic)) await message.Channel.SendMessageAsync($"```{(message.Channel as ITextChannel).Topic}```");
-                }
-
-                if (message.Content.ToLower().Substring(1).StartsWith("add"))
-                {
-                    if (CheckPermission(message))
-                    {
-                        if (!File.Exists(@"Commands.xml"))
+                    case ("say"):
                         {
-                            CustomCommands.CreateXmlFile(@"Commands.xml", "GuildName", (message.Author as SocketGuildUser).Guild.Name);
+                            await message.Channel.SendMessageAsync(message.Content.Substring(5));
                         }
-                        string[] temp = SplitStrings(message.Content);
-                        CustomCommands.AddToXmlFile(temp[0], temp[1]);
-                        await message.Channel.SendMessageAsync("The command has been added.");
-                    }
-                }
+                        break;
+                    case ("role"):
+                        {
+                            SocketGuildUser user = message.Author as SocketGuildUser;
+                            int userLevel = await UserStats.CountLevelAsync(user);
+                            if (message.Content.Split()[1].ToLower() == "reset")
+                            {
+                                var roleToRemove = user.Roles.FirstOrDefault(x =>
+                                {
+                                    bool checker = false;
+                                    foreach (string r in rolesHierarchy)
+                                    {
+                                        if (x.Name.ToLower() == r.ToLower()) checker = true;
+                                    }
+                                    return checker;
+                                });
+                                if (roleToRemove != null) await user.RemoveRoleAsync(roleToRemove);
+                                if (userLevel <= rolesHierarchy.Length)
+                                    await user.AddRoleAsync(user.Guild.Roles.FirstOrDefault(x => x.Name.ToLower() == rolesHierarchy[userLevel]));
+                                else
+                                    await user.AddRoleAsync(user.Guild.Roles.FirstOrDefault(x => x.Name.ToLower() == rolesHierarchy[rolesHierarchy.Length - 1]));
+                            }
+                            else
+                            {
+                                string requestedRole = message.Content.ToLower().Substring(6);
+                                string matchingRole = Char.IsDigit(requestedRole[0]) ? 
+                                    rolesHierarchy[Convert.ToInt32(requestedRole)] : 
+                                    rolesHierarchy.FirstOrDefault(r => r.Contains(requestedRole));
 
-                if (message.Content.ToLower().Substring(1).StartsWith("remove"))
-                {
-                    if (CheckPermission(message))
-                    {
-                        string temp = message.Content.Substring(message.Content.IndexOf(' ') + 1);
-                        CustomCommands.RemoveFromXmlFile(temp);
-                        await message.Channel.SendMessageAsync("The command has been removed.");
-                    }
-                }
+                                if(matchingRole != null)
+                                {
+                                    if (userLevel >= Array.IndexOf(rolesHierarchy, matchingRole))
+                                    {
+                                        var roleToRemove = user.Roles.FirstOrDefault(x =>
+                                        {
+                                            bool checker = false;
+                                            foreach (string r in rolesHierarchy)
+                                            {
+                                                if (x.Name.ToLower() == r.ToLower()) checker = true;
+                                            }
+                                            return checker;
+                                        });
+                                        if (roleToRemove != null) await user.RemoveRoleAsync(roleToRemove);
+                                        var role = user.Guild.Roles.FirstOrDefault(r => r.Name.ToLower() == matchingRole);
+                                        await user.AddRoleAsync(role);
+                                    }
+                                    else
+                                    {
+                                        await message.Channel.SendMessageAsync($"You aren't experienced enough to have \"{matchingRole.Normalize()}\" title.");
+                                    }
+                                }
+                            }
+                        }
+                        break;
+                    case ("item"):
+                        {
+                            if (message.Content.Length == 5)
+                            {
+                                await message.Channel.SendMessageAsync("Try to specify an item's name.");
+                            }
+                            else
+                            {
+                                Embed e = await GenerateItemCard(message);
+                                await message.Channel.SendMessageAsync("", false, e);
+                            }
+                        }
+                        break;
+                    case ("items"):
+                        {
+                            Embed e = await GenerateDroplist(message);
+                            await message.Channel.SendMessageAsync("", false, e);
+                        }
+                        break;
+                    case ("source"):
+                        {
+                            if (message.Content.TrimEnd(' ').ToLower() == "!source")
+                            {
+                                await message.Channel.SendMessageAsync("Try to specify a source name.");
+                            }
+                            else
+                            {
+                                var embed = await GenerateMobCard(message);
+                                var botMessage = await message.Channel.SendMessageAsync("", false, embed);
 
-                if (message.Content.ToLower().Substring(1).ToLower().StartsWith("sendhelp")) //embedded message?
-                {
-                    var tempEBuilder = new EmbedBuilder()
+                                //await botMessage.AddReactionAsync(new Emoji("\u2B07"));
+
+                            }
+                        }
+                        break;
+                    case ("purge"):
+                        {
+                            if (CheckPermission(message) && message.Content.ToLower().TrimEnd(' ') != "!purge")
+                            {
+                                string[] purge = message.Content.Split(' ');
+                                if (purge[1].Length > 3)
+                                {
+                                    var messagesTemp = message.Channel.GetMessagesAsync(Convert.ToUInt64(purge[1]), Direction.After);
+                                    await messagesTemp.ForEachAsync(async m =>
+                                    {
+                                        foreach (IMessage mes in m)
+                                        {
+                                            await mes.DeleteAsync();
+                                        }
+                                    });
+                                }
+                                else
+                                {
+                                    var messagesTemp = message.Channel.GetMessagesAsync(Convert.ToInt32(purge[1]));
+                                    await messagesTemp.ForEachAsync(async m =>
+                                    {
+                                        foreach (IMessage mes in m)
+                                        {
+                                            await mes.DeleteAsync();
+                                        }
+                                    });
+                                }
+                            }
+                        }
+                        break;
+                    case ("myexp"):
+                        {
+                            await message.Channel.SendMessageAsync($"Your experience is {await UserStats.GetUserExperienceAsync(message.Author as SocketGuildUser)}");
+                        }
+                        break;
+                    case ("mylvl"):
+                        {
+                            await message.Channel.SendMessageAsync($"Your level is {await UserStats.CountLevelAsync(message.Author as SocketGuildUser)}");
+                        }
+                        break;
+                    case ("topic"):
+                        {
+                            if (!String.IsNullOrEmpty((message.Channel as ITextChannel).Topic))
+                                await message.Channel.SendMessageAsync($"```{(message.Channel as ITextChannel).Topic}```");
+                        }
+                        break;
+                    case ("getuserslist"):
+                        {
+                            await RegisterUsersAsync(message);
+                        }
+                        break;
+                    case ("top"):
+                        {
+                            int temp = 0;
+                            if (Int32.TryParse(message.Content.Substring("!top".Length), out temp))
+                            {
+                                await message.Channel.SendMessageAsync(await GenerateListOfTops(message));
+                            }
+                        }
+                        break;
+                    case ("add"):
+                        {
+                            if (CheckPermission(message))
+                            {
+                                if (!File.Exists(@"Commands.xml"))
+                                {
+                                    CustomCommands.CreateXmlFile(@"Commands.xml", "GuildName", (message.Author as SocketGuildUser).Guild.Name);
+                                }
+                                string[] temp = SplitStrings(message.Content);
+                                CustomCommands.AddToXmlFile(temp[0], temp[1]);
+                                await message.Channel.SendMessageAsync("The command has been added.");
+                            }
+                        }
+                        break;
+                    case ("remove"):
+                        {
+                            if (CheckPermission(message))
+                            {
+                                string temp = message.Content.Substring(message.Content.IndexOf(' ') + 1);
+                                CustomCommands.RemoveFromXmlFile(temp);
+                                await message.Channel.SendMessageAsync("The command has been removed.");
+                            }
+                        }
+                        break;
+                    case ("sendhelp"):
+                        {
+                            Embed e = new EmbedBuilder()
                         .AddField("Info", ConfigurationManager.AppSettings.Get("helpMessage"))
                         .AddField("Simple commands", "```fix\n" + CustomCommands.GenerateCommandsList() + "```", true)
                         .AddField("Advanced commands", "```fix\n!item\n!items\n!source```", true).Build();
-                    await message.Channel.SendMessageAsync("", false, tempEBuilder);
+                            await message.Channel.SendMessageAsync("", false, e);
+                        }
+                        break;
+                    default:
+                        {
+                            string answer = CustomCommands.GetAnswer(message.Content.ToLower().Substring(1));
+                            await message.Channel.SendMessageAsync(answer);
+                        }
+                        break;
                 }
-                else
-                {
-                    string answer = CustomCommands.GetAnswer(message.Content.ToLower().Substring(1));
-                    await message.Channel.SendMessageAsync(answer);
-                }
+            }
+            else
+            {
+                //count exp here?
+                if (message.Content.Length > 10 && !message.Author.IsBot) { await UserStats.UpdateExperienceAsync(message); }
             }
             #endregion
         }
@@ -227,7 +281,7 @@ namespace GaiasBot
                 bool checker = false;
                 foreach (var role in user.Roles)
                 {
-                    if (role.Name.ToLower() == "admin" || role.Name.ToLower() == "it helper" || role.Name.ToLower() == "manager" || user.Id == 216299219865042944)
+                    if (role.Name.ToLower() == "admin" || role.Name.ToLower() == "moderator" || role.Name.ToLower() == "developer" || user.Id == 216299219865042944)
                     {
                         checker = true;
                     }
@@ -307,7 +361,7 @@ namespace GaiasBot
 
             int experience = await UserStats.GetUserExperienceAsync(user);
             int level = UserStats.CountLevel(experience);
-
+            //if the user changed its role (the role isn't equal to the user's lvl), ignore this
             if (level < rolesHierarchy.Length) //actual solution
             {
                 await user.AddRoleAsync(
@@ -402,9 +456,8 @@ namespace GaiasBot
             try
             {
                 items = await DropSheet.GetItemsByTypeAndLevelAsync(commandSplitted[1], Convert.ToInt32(commandSplitted[2]), Convert.ToInt32(commandSplitted[3]));
-                //eb.Title = commandSplitted[1] + " items list within level range: " + commandSplitted[2] + "-" + commandSplitted[3];
             }
-            catch (IndexOutOfRangeException) //split the list in a few messages with less than 2k symbols
+            catch (IndexOutOfRangeException) //split the list in a few messages with less than 2k symbols here
             {
                 try //probably, not the best solution.
                 {
@@ -437,7 +490,7 @@ namespace GaiasBot
                 itemType += item.Element("secondaryType").Value + "\n";
             }
 
-            if (itemNames.Length >= 1023)
+            if (itemNames.Length >= 1024)
             {
                 return eb.AddField("Too big", $"The list contains more characters than Discord allows (1024 is the cap).\n" +
                     $"There are {itemNames.Length} characters in the list. Try a smaller level range to get a shorter list.\n" +
@@ -501,10 +554,10 @@ namespace GaiasBot
             itemNames = itemNames.TrimEnd('\n');
             itemLevels = itemLevels.TrimEnd('\n');
             itemType = itemType.TrimEnd('\n');
-            
-            eb.AddField("Level", itemLevels, inline:true);
-            eb.AddField("Type", itemType, inline:true);
-            eb.AddField("Item", itemNames, inline:true);
+
+            eb.AddField("Level", itemLevels, true);
+            eb.AddField("Type", itemType, true);
+            eb.AddField("Item", itemNames, true);
 
             return eb.Build();
         }
@@ -570,7 +623,6 @@ namespace GaiasBot
             }
             title = title.TrimEnd(',', ' ');
             eb.Title = title;
-            //eb.AddField("Matching sources", title);
             eb.Color = Color.DarkGreen;
 
             string itemNames = string.Empty;

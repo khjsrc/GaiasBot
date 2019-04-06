@@ -167,6 +167,11 @@ namespace GaiasBot
             return exp;
         }
 
+        /// <summary>
+        /// Returns the level of a user. 0 is for newbie, 1 is for the crab killer and so on.
+        /// </summary>
+        /// <param name="user"></param>
+        /// <returns></returns>
         public static async Task<int> CountLevelAsync(SocketGuildUser user)
         {
             int level = 0;
