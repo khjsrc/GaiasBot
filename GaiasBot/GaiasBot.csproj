@@ -133,6 +133,7 @@
     <Compile Include="Bot.cs" />
     <Compile Include="CustomCommands.cs" />
     <Compile Include="DropSheet.cs" />
+    <Compile Include="EmbedPaginator.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="UserStats.cs" />

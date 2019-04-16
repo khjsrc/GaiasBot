@@ -14,6 +14,14 @@ using System.IO;
 using System.Net.Http;
 using System.Text.RegularExpressions;
 
+#region
+/* TODO:
+ * 1. Merge GenerateDroplist and GenerateMobCard methods
+ * 2. Add threads (or more tasks) to all this shit and create a new one every time the bot reacts to a message and remove all the reactions from the messages after 60 seconds.
+ *   2.1. Pass the message ID to a method for a thread and then remove all the reactions from the message? Or pass the whole message object? Probably, just message ID is better.
+ */
+#endregion
+
 namespace GaiasBot
 {
     static class Bot
@@ -47,9 +55,22 @@ namespace GaiasBot
             //3. Add a role named "newbie" ?
         }
 
-        internal static Task OnReactionAdded(Cacheable<IUserMessage, ulong> arg1, ISocketMessageChannel arg2, SocketReaction arg3)
+        internal static async Task OnReactionAdded(Cacheable<IUserMessage, ulong> arg1, ISocketMessageChannel arg2, SocketReaction arg3)
         {
-            throw new NotImplementedException();
+            var msg = await arg2.GetMessageAsync(arg1.Id);
+            if (arg2.Name == "banana-beta" && msg.Author.IsBot && arg3.Emote.Name == "\u2B07" && !arg3.User.Value.IsBot)
+            {
+                await (msg as IUserMessage).RemoveAllReactionsAsync();
+                //send next paginated message
+                var botMessage = await arg2.SendMessageAsync(embed:EmbedPaginator.GetNext());
+                if (EmbedPaginator.Operational)
+                    await botMessage.AddReactionAsync(new Emoji("\u2B07"));
+            }
+            else
+            {
+                return;
+            }
+            //throw new NotImplementedException();
         }
 
         internal static async Task OnUserLeft(SocketGuildUser user)
@@ -67,7 +88,7 @@ namespace GaiasBot
                 {
                     case ("say"):
                         {
-                            await message.Channel.SendMessageAsync(message.Content.Substring(5));
+                            var botMsg = await message.Channel.SendMessageAsync(message.Content.Substring(5));
                         }
                         break;
                     case ("role"):
@@ -94,11 +115,11 @@ namespace GaiasBot
                             else
                             {
                                 string requestedRole = message.Content.ToLower().Substring(6);
-                                string matchingRole = Char.IsDigit(requestedRole[0]) ? 
-                                    rolesHierarchy[Convert.ToInt32(requestedRole)] : 
+                                string matchingRole = Char.IsDigit(requestedRole[0]) ?
+                                    rolesHierarchy[Convert.ToInt32(requestedRole)] :
                                     rolesHierarchy.FirstOrDefault(r => r.Contains(requestedRole));
 
-                                if(matchingRole != null)
+                                if (matchingRole != null)
                                 {
                                     if (userLevel >= Array.IndexOf(rolesHierarchy, matchingRole))
                                     {
@@ -139,7 +160,10 @@ namespace GaiasBot
                     case ("items"):
                         {
                             Embed e = await GenerateDroplist(message);
-                            await message.Channel.SendMessageAsync("", false, e);
+                            var botMessage = await message.Channel.SendMessageAsync(embed:e);
+
+                            if (EmbedPaginator.Operational)
+                                await botMessage.AddReactionAsync(new Emoji("\u2B07"));
                         }
                         break;
                     case ("source"):
@@ -150,11 +174,11 @@ namespace GaiasBot
                             }
                             else
                             {
-                                var embed = await GenerateMobCard(message);
-                                var botMessage = await message.Channel.SendMessageAsync("", false, embed);
+                                var e = await GenerateMobCard(message);
+                                var botMessage = await message.Channel.SendMessageAsync(embed:e);
 
-                                //await botMessage.AddReactionAsync(new Emoji("\u2B07"));
-
+                                if(EmbedPaginator.Operational)
+                                    await botMessage.AddReactionAsync(new Emoji("\u2B07"));
                             }
                         }
                         break;
@@ -275,7 +299,6 @@ namespace GaiasBot
 
         internal static bool CheckPermission(SocketMessage msg)
         {
-            //I don't know why, but still, it's a lambda expression.
             Func<SocketGuildUser, bool> checkRoles = (user) =>
             {
                 bool checker = false;
@@ -343,8 +366,6 @@ namespace GaiasBot
 
         internal static async Task RegisterUsersAsync(SocketMessage msg)
         {
-            //await Task.Run(() => (msg.Author as SocketGuildUser).Guild.DownloadUsersAsync());
-
             await UserStats.CreateXmlFileAsync(msg.Author as SocketGuildUser);
 
             foreach (SocketGuildUser user in (msg.Author as SocketGuildUser).Guild.Users)
@@ -355,14 +376,13 @@ namespace GaiasBot
 
         public static async Task OnLevelChanged(SocketGuildUser user)
         {
-            //var user = msg.Author as SocketGuildUser;
             var userRoles = user.Roles;
             var guildRoles = user.Guild.Roles;
 
             int experience = await UserStats.GetUserExperienceAsync(user);
             int level = UserStats.CountLevel(experience);
-            //if the user changed its role (the role isn't equal to the user's lvl), ignore this
-            if (level < rolesHierarchy.Length) //actual solution
+            //if the user's roles don't contain the highest possible role, don't promote the user
+            if (level < rolesHierarchy.Length && userRoles.FirstOrDefault(r => r.Name.ToLower() == rolesHierarchy[level]) != null) //actual solution
             {
                 await user.AddRoleAsync(
                     user.Guild.Roles.FirstOrDefault(x => x.Name.ToLower() == rolesHierarchy[level]));
@@ -457,7 +477,7 @@ namespace GaiasBot
             {
                 items = await DropSheet.GetItemsByTypeAndLevelAsync(commandSplitted[1], Convert.ToInt32(commandSplitted[2]), Convert.ToInt32(commandSplitted[3]));
             }
-            catch (IndexOutOfRangeException) //split the list in a few messages with less than 2k symbols here
+            catch (IndexOutOfRangeException)
             {
                 try //probably, not the best solution.
                 {
@@ -492,10 +512,12 @@ namespace GaiasBot
 
             if (itemNames.Length >= 1024)
             {
-                return eb.AddField("Too big", $"The list contains more characters than Discord allows (1024 is the cap).\n" +
+                EmbedPaginator.Process(items.ToList());
+                return EmbedPaginator.GetNext();
+                /*return eb.AddField("Too big", $"The list contains more characters than Discord allows (1024 is the cap).\n" +
                     $"There are {itemNames.Length} characters in the list. Try a smaller level range to get a shorter list.\n" +
                     $"```!items <type> <minLvl-maxLvl>```" +
-                    $"The list contains {items.Count()} items btw.").Build();
+                    $"The list contains {items.Count()} items btw.").Build();*/
             }
 
             #region this doesn't work properly for discord, because it has a limit for messages sent in a short period of time
@@ -634,7 +656,11 @@ namespace GaiasBot
                 itemLevels += item.Element("level").Value + "\n";
                 itemType += item.Element("secondaryType").Value + "\n";
             }
-
+            if(itemNames.Length >= 1024)
+            {
+                EmbedPaginator.Process(items.ToList());
+                return EmbedPaginator.GetNext();
+            }
             eb.AddField("Level", itemLevels, true);
             eb.AddField("Type", itemType, true);
             eb.AddField("Name", itemNames, true);

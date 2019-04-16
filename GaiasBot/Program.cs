@@ -21,6 +21,7 @@ namespace GaiasBot
             Bot._client.MessageReceived += Bot.OnMessageReceived;
             Bot._client.UserJoined += Bot.OnUserJoined;
             Bot._client.UserLeft += Bot.OnUserLeft;
+            Bot._client.ReactionAdded += Bot.OnReactionAdded;
 
             await Bot._client.SetGameAsync("say !sendhelp");
             await Bot._client.LoginAsync(TokenType.Bot, Bot.Token);
