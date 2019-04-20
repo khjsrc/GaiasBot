@@ -59,7 +59,7 @@ namespace GaiasBot
             return eb.Build();
         }
 
-        private static void Reset()
+        internal static void Reset()
         {
             Operational = false;
             items = null;

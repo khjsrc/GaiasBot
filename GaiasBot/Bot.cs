@@ -62,15 +62,19 @@ namespace GaiasBot
             {
                 await (msg as IUserMessage).RemoveAllReactionsAsync();
                 //send next paginated message
-                var botMessage = await arg2.SendMessageAsync(embed:EmbedPaginator.GetNext());
+                var botMessage = await arg2.SendMessageAsync(embed: EmbedPaginator.GetNext());
                 if (EmbedPaginator.Operational)
-                    await botMessage.AddReactionAsync(new Emoji("\u2B07"));
+                    await botMessage.AddReactionAsync(new Emoji("\u2B07")).ContinueWith(async (antecedent) =>
+                    {
+                        await Task.Delay(30000);
+                        await botMessage.RemoveAllReactionsAsync();
+                        EmbedPaginator.Reset();
+                    });
             }
             else
             {
                 return;
             }
-            //throw new NotImplementedException();
         }
 
         internal static async Task OnUserLeft(SocketGuildUser user)
@@ -160,10 +164,15 @@ namespace GaiasBot
                     case ("items"):
                         {
                             Embed e = await GenerateDroplist(message);
-                            var botMessage = await message.Channel.SendMessageAsync(embed:e);
+                            var botMessage = await message.Channel.SendMessageAsync(embed: e);
 
                             if (EmbedPaginator.Operational)
-                                await botMessage.AddReactionAsync(new Emoji("\u2B07"));
+                                await botMessage.AddReactionAsync(new Emoji("\u2B07")).ContinueWith(async (antecedent) =>
+                                {
+                                    await Task.Delay(30000);
+                                    await botMessage.RemoveAllReactionsAsync();
+                                    EmbedPaginator.Reset();
+                                });
                         }
                         break;
                     case ("source"):
@@ -175,10 +184,15 @@ namespace GaiasBot
                             else
                             {
                                 var e = await GenerateMobCard(message);
-                                var botMessage = await message.Channel.SendMessageAsync(embed:e);
+                                var botMessage = await message.Channel.SendMessageAsync(embed: e);
 
-                                if(EmbedPaginator.Operational)
-                                    await botMessage.AddReactionAsync(new Emoji("\u2B07"));
+                                if (EmbedPaginator.Operational)
+                                    await botMessage.AddReactionAsync(new Emoji("\u2B07")).ContinueWith(async (antecedent) =>
+                                    {
+                                        await Task.Delay(30000);
+                                        await botMessage.RemoveAllReactionsAsync();
+                                        EmbedPaginator.Reset();
+                                    });
                             }
                         }
                         break;
@@ -656,7 +670,7 @@ namespace GaiasBot
                 itemLevels += item.Element("level").Value + "\n";
                 itemType += item.Element("secondaryType").Value + "\n";
             }
-            if(itemNames.Length >= 1024)
+            if (itemNames.Length >= 1024)
             {
                 EmbedPaginator.Process(items.ToList());
                 return EmbedPaginator.GetNext();
