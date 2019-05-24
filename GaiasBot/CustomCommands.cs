@@ -175,7 +175,7 @@ namespace GaiasBot
         {
             List<string> temp = new List<string>();
             XmlNodeList nodeList = CommandsList.SelectNodes("/root/command/@alias"); //chooses only alias' attribute values
-            string output = "```fix\nCommands list: ";
+            string output = "Commands list: ";
 
             foreach (XmlNode node in nodeList)
             {
@@ -186,7 +186,6 @@ namespace GaiasBot
             {
                 output += "\n!" + s;
             }
-            output += "```";
             return output;
         }
     }

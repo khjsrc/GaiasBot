@@ -58,7 +58,7 @@ namespace GaiasBot
         internal static async Task OnReactionAdded(Cacheable<IUserMessage, ulong> arg1, ISocketMessageChannel arg2, SocketReaction arg3)
         {
             var msg = await arg2.GetMessageAsync(arg1.Id);
-            if (arg2.Name == "banana-beta" && msg.Author.IsBot && arg3.Emote.Name == "\u2B07" && !arg3.User.Value.IsBot)
+            if (msg.Author.IsBot && arg3.Emote.Name == "\u2B07" && !arg3.User.Value.IsBot)
             {
                 await (msg as IUserMessage).RemoveAllReactionsAsync();
                 //send next paginated message
@@ -90,16 +90,25 @@ namespace GaiasBot
                 string request = message.Content.TrimEnd(' ').Substring(1).Split()[0].ToLower();
                 switch (request)
                 {
+                    case ("test"):
+                        {
+                            break;
+                        }
                     case ("say"):
                         {
-                            var botMsg = await message.Channel.SendMessageAsync(message.Content.Substring(5));
+                            await message.Channel.SendMessageAsync(message.Content.Substring(5));
+                            await message.DeleteAsync();
                         }
                         break;
                     case ("role"):
                         {
                             SocketGuildUser user = message.Author as SocketGuildUser;
                             int userLevel = await UserStats.CountLevelAsync(user);
-                            if (message.Content.Split()[1].ToLower() == "reset")
+                            if(message.Content.Length == 5)
+                            {
+                                await message.Channel.SendMessageAsync("Command usage: `!role <name>` or `!role reset`.\n`!role lfg` for the LFG role.");
+                            }
+                            else if (message.Content.Split()[1].ToLower() == "reset")
                             {
                                 var roleToRemove = user.Roles.FirstOrDefault(x =>
                                 {
@@ -115,6 +124,17 @@ namespace GaiasBot
                                     await user.AddRoleAsync(user.Guild.Roles.FirstOrDefault(x => x.Name.ToLower() == rolesHierarchy[userLevel]));
                                 else
                                     await user.AddRoleAsync(user.Guild.Roles.FirstOrDefault(x => x.Name.ToLower() == rolesHierarchy[rolesHierarchy.Length - 1]));
+                            }
+                            else if(message.Content.Split()[1].ToLower() == "lfg")
+                            {
+                                if (user.Roles.FirstOrDefault(x => { return x.Name.ToLower() == "lfg"; }) != null)
+                                {
+                                    await user.RemoveRoleAsync(user.Guild.Roles.FirstOrDefault(x => { return x.Name.ToLower() == "lfg"; }));
+                                }
+                                else
+                                {
+                                    await user.AddRoleAsync(user.Guild.Roles.FirstOrDefault(x => { return x.Name.ToLower() == "lfg"; }));
+                                }
                             }
                             else
                             {
@@ -142,7 +162,7 @@ namespace GaiasBot
                                     }
                                     else
                                     {
-                                        await message.Channel.SendMessageAsync($"You aren't experienced enough to have \"{matchingRole.Normalize()}\" title.");
+                                        await message.Channel.SendMessageAsync($"You aren't experienced enough to have \"{matchingRole}\" title.");
                                     }
                                 }
                             }
@@ -285,7 +305,7 @@ namespace GaiasBot
                             Embed e = new EmbedBuilder()
                         .AddField("Info", ConfigurationManager.AppSettings.Get("helpMessage"))
                         .AddField("Simple commands", "```fix\n" + CustomCommands.GenerateCommandsList() + "```", true)
-                        .AddField("Advanced commands", "```fix\n!item\n!items\n!source```", true).Build();
+                        .AddField("Advanced commands", "```fix\n!item\n!items\n!source\n!role```", true).Build();
                             await message.Channel.SendMessageAsync("", false, e);
                         }
                         break;
@@ -396,7 +416,7 @@ namespace GaiasBot
             int experience = await UserStats.GetUserExperienceAsync(user);
             int level = UserStats.CountLevel(experience);
             //if the user's roles don't contain the highest possible role, don't promote the user
-            if (level < rolesHierarchy.Length && userRoles.FirstOrDefault(r => r.Name.ToLower() == rolesHierarchy[level]) != null) //actual solution
+            if (level < rolesHierarchy.Length && userRoles.FirstOrDefault(r => r.Name.ToLower() == rolesHierarchy[level - 1]) != null) //actual solution
             {
                 await user.AddRoleAsync(
                     user.Guild.Roles.FirstOrDefault(x => x.Name.ToLower() == rolesHierarchy[level]));
